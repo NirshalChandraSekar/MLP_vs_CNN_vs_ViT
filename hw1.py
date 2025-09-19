@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from vit import ViTForCIFAR10
+import torch.optim as optim
 
 class CNN_classifier(nn.Module):
     def __init__(self, in_channels, num_classes):
@@ -20,13 +21,25 @@ class CNN_classifier(nn.Module):
 class MLP_classifier(nn.Module):
     def __init__(self, in_channels, num_classes):
         super().__init__()
-        # TODO
-    
+
+        print(f'Input dimension to the model: {in_channels}')
+        print(f'Number of classes: {num_classes}')
+
+        # Single linear layer classifier without non-linear activations
+        self.fc1 = nn.Linear(in_channels, 1024)
+        self.fc2 = nn.Linear(1024, 512)
+        self.fc3 = nn.Linear(512, num_classes)
+        self.ReLU = nn.ReLU()
+
     def forward(self, x):
-        # TODO
+        x = self.fc1(x)
+        x = self.ReLU(x)
+        x = self.fc2(x)
+        x = self.ReLU(x)
+        x = self.fc3(x)
         return x
 
-def plot_loss(train_losses, val_losses):
+def plot_loss(train_losses, val_losses, graph_name):
     plt.plot(train_losses, label='Training Loss')
     plt.plot(val_losses, label='Validation Loss')
     plt.xlabel('Epochs')
@@ -34,7 +47,7 @@ def plot_loss(train_losses, val_losses):
     plt.legend()
     plt.title('Train Loss vs Epochs')
     plt.grid(True)
-    plt.savefig('.../loss_graph.png')
+    plt.savefig(graph_name)
     plt.close('all')
 
 
@@ -43,7 +56,8 @@ def training(model, loaders, criterion, optimizer, device):
     total_loss = 0.0
 
     for _, (images,labels) in enumerate(loaders['train']):
-        images = images.requires_grad_().to(device)
+        images = images.requires_grad_().to(device) #(B*C*H*W)
+        images = images.view(images.size(0), -1) #(B, C*H*W)
         labels = labels.to(device)
         optimizer.zero_grad()
         outputs = model(images)
@@ -65,6 +79,8 @@ def valid_or_test_fn(model, loaders, criterion, device, valid_or_test):
     with torch.no_grad():
         for i, (images, labels) in enumerate(loaders[valid_or_test]):
             images = images.to(device)
+            original_images = images.clone()
+            images = images.view(images.size(0), -1) #(B, C*H*W)
             labels = labels.to(device)
             outputs = model(images)
             loss = criterion(outputs, labels)
@@ -79,13 +95,13 @@ def valid_or_test_fn(model, loaders, criterion, device, valid_or_test):
             if valid_or_test == 'test':
                 class_names = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
                 if i in [5, 7, 10, 12, 15, 20]:
-                    image = images[0,...].clone().squeeze().detach().cpu().numpy()
+                    image = original_images[0,...].squeeze().detach().cpu().numpy()
                     label = labels[0].item()
                     predicted_label = predicted[0].item()
                     plt.figure(figsize=(4, 4))
                     plt.imshow(image.transpose(1,2,0))
                     plt.title(f'Predicted = {class_names[predicted_label]} / True Label = {class_names[label]}')
-                    plt.savefig('.../test_out_1st_img_from_batch_{:04}.png'.format(i))
+                    plt.savefig('mlp_relu/test_out_1st_img_from_batch_{:04}.png'.format(i))
                     plt.close()
         
         accuracy = 100 * correct / total
@@ -95,13 +111,19 @@ def valid_or_test_fn(model, loaders, criterion, device, valid_or_test):
 def plot_confusion_matrix(true_labels, predicted_labels, class_names):
     from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
     # TODO: Plot the confusion matrix, you can use the imported libraries above if desired
+    cm = confusion_matrix(true_labels, predicted_labels)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+    disp.plot(cmap=plt.cm.Blues) 
+    plt.title('Confusion Matrix')
+    plt.savefig('mlp_relu/confusion_matrix.png')
+    plt.close()
 
 def main():
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')    
-    num_epochs = # TODO : Set a proper number of epochs (try multiple values -- should be at least 20)
-    learning_rate = # TODO : Set a proper learning rate (try multiple values)
-    batch_size = # TODO : Set a proper batch size (try multiple values)
+    num_epochs = 30
+    learning_rate = 0.001
+    batch_size = 64
     num_classes = 10
     
     class_names = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
@@ -111,13 +133,23 @@ def main():
             'test': torch.utils.data.DataLoader(test_data, batch_size = batch_size, shuffle=True),
             'valid': torch.utils.data.DataLoader(valid_data, batch_size = batch_size, shuffle=True)}
     
+
+    '''
+    DUBUGGING PRINTS
+    '''
+    images, labels = next(iter(loaders['train']))
+    print(f'Image batch shape: {images.size()}')
+    print(f'Image label shape: {labels.size()}')
+
+    flattened_image_dimension = 3*32*32  # checked by printing the shape of the images from the dataset
+
     # TODO : Define your model here
-    #model = MLP_classifier(3, num_classes).to(device)
+    model = MLP_classifier(flattened_image_dimension, num_classes).to(device)
     #model = CNN_classifier(3, num_classes).to(device)
     #model = ViTForCIFAR10(img_size=32, patch_size=4, embed_dim=192, depth=6, num_heads=3, mlp_ratio=4.0).to(device)
 
-    criterion = # TODO : Define your choice of loss function here, explain in report why you chose it
-    optimizer = # TODO : Define your choice of optimizer here, explain in report why you chose it
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     train_losses = []
     val_losses = []
@@ -132,7 +164,8 @@ def main():
         val_loss, valid_accuracy, _, _ = valid_or_test_fn(model, loaders, criterion, device, 'valid')
         val_losses.append(val_loss)
         print(f'Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {valid_accuracy:.4f}')
-    plot_loss(train_losses, val_losses)
+    loss_graph_name = 'mlp_relu/loss_graph.png'
+    plot_loss(train_losses, val_losses, loss_graph_name)
 
     # Testing
     _, test_accuracy, all_labels, all_predictions = valid_or_test_fn(model, loaders, criterion, device, 'test')
