@@ -9,14 +9,38 @@ import os
 from vit import ViTForCIFAR10
 import torch.optim as optim
 
+
 class CNN_classifier(nn.Module):
     def __init__(self, in_channels, num_classes):
         super(CNN_classifier, self).__init__()
-        # TODO
-        
+
+        self.convolution_head = nn.Sequential(
+            nn.Conv2d(in_channels, 32, kernel_size=3, stride=1, padding=1), # (B, 32, 32, 32)
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),  # Conv2
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # output size /2
+
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),  # Conv3
+            nn.ReLU(),
+            nn.MaxPool2d(2)   # output size /2
+        )
+
+        self.classification_head = nn.Sequential(
+            nn.Linear(128 * 4 * 4, 256),
+            nn.ReLU(),
+            nn.Linear(256, num_classes)
+        )
+
     def forward(self, x):
-        # TODO
+        x = self.convolution_head(x)
+        print(f'Feature map shape after conv layers: {x.shape}')
+        x = x.view(x.size(0), -1)  # Flatten the tensor
+        y = self.classification_head(x)
         return y
+
 
 class MLP_classifier(nn.Module):
     def __init__(self, in_channels, num_classes):
@@ -32,12 +56,14 @@ class MLP_classifier(nn.Module):
         self.ReLU = nn.ReLU()
 
     def forward(self, x):
+        x = x.view(x.size(0), -1)  # Flatten the tensor
         x = self.fc1(x)
         x = self.ReLU(x)
         x = self.fc2(x)
         x = self.ReLU(x)
         x = self.fc3(x)
         return x
+
 
 def plot_loss(train_losses, val_losses, graph_name):
     plt.plot(train_losses, label='Training Loss')
@@ -69,6 +95,7 @@ def training(model, loaders, criterion, optimizer, device):
     avg_loss = total_loss / len(loaders['train'])
     return avg_loss
 
+
 def valid_or_test_fn(model, loaders, criterion, device, valid_or_test):
     model.eval()
     total_loss = 0.0
@@ -80,7 +107,7 @@ def valid_or_test_fn(model, loaders, criterion, device, valid_or_test):
         for i, (images, labels) in enumerate(loaders[valid_or_test]):
             images = images.to(device)
             original_images = images.clone()
-            images = images.view(images.size(0), -1) #(B, C*H*W)
+            # images = images.view(images.size(0), -1) #(B, C*H*W)
             labels = labels.to(device)
             outputs = model(images)
             loss = criterion(outputs, labels)
@@ -108,6 +135,7 @@ def valid_or_test_fn(model, loaders, criterion, device, valid_or_test):
         avg_loss = total_loss / len(loaders[valid_or_test])
     return avg_loss, accuracy, all_labels, all_predictions
 
+
 def plot_confusion_matrix(true_labels, predicted_labels, class_names):
     from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
     # TODO: Plot the confusion matrix, you can use the imported libraries above if desired
@@ -117,6 +145,8 @@ def plot_confusion_matrix(true_labels, predicted_labels, class_names):
     plt.title('Confusion Matrix')
     plt.savefig('mlp_relu/confusion_matrix.png')
     plt.close()
+
+
 
 def main():
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -173,6 +203,8 @@ def main():
     
     print(f'\nTest Accuracy: {test_accuracy:.4f}')
     print('\nFINISHED Training!\n' + '*' * 60)
+
+
 
 if __name__ == "__main__":
     main()
