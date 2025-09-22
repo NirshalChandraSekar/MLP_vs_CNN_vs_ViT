@@ -23,27 +23,40 @@ class SelfAttention(nn.Module):
         # H = self.num_heads, D = self.head_dim, with C = H*D
         # qkv = ...
         # q, k, v = qkv.unbind(dim=2)  # each (B, N, H, D)
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
+        q, k, v = qkv.unbind(dim=2)  # each (B, N, H, D)
 
         # TODO 2: move heads before tokens -> (B, H, N, D)
         # q = ...
         # k = ...
         # v = ...
+        q = q.transpose(1, 2)  # (B, H, N, D)
+        k = k.transpose(1, 2)  # (B, H, N, D)
+        v = v.transpose(1, 2)  # (B, H, N, D)
 
         # TODO 3: attention scores = (q @ k^T) * self.scale -> (B, H, N, N)
         # attn = ...
+        attn = (q @ k.transpose(-2, -1)) * self.scale  # (B, H, N, N)
 
         # TODO 4: softmax over last dim and dropout
         # attn = ...
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
 
         # TODO 5: attention-weighted sum with v -> (B, H, N, D)
         # out = ...
+        out = attn @ v  # (B, H, N, D)
 
         # TODO 6: merge heads back -> (B, N, C)
         # out = out.transpose(1, 2).reshape(B, N, C)
+        out = out.transpose(1, 2).reshape(B, N, C)
 
         # TODO 7: final projection and dropout
         # out = ...
         # return out
+        out = self.proj(out)
+        out = self.proj_drop(out)
+        return out
 
 class PatchEmbed(nn.Module):
     def __init__(self, img_size=32, patch_size=4, in_chans=3, embed_dim=192):

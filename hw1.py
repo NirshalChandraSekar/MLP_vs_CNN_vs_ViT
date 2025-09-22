@@ -29,14 +29,19 @@ class CNN_classifier(nn.Module):
         )
 
         self.classification_head = nn.Sequential(
-            nn.Linear(128 * 4 * 4, 256),
+            nn.Linear(128 * 4 * 4, 1024),
             nn.ReLU(),
-            nn.Linear(256, num_classes)
+            nn.Dropout(0.5),
+
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+
+            nn.Linear(512, num_classes)
         )
 
     def forward(self, x):
         x = self.convolution_head(x)
-        print(f'Feature map shape after conv layers: {x.shape}')
         x = x.view(x.size(0), -1)  # Flatten the tensor
         y = self.classification_head(x)
         return y
@@ -83,7 +88,7 @@ def training(model, loaders, criterion, optimizer, device):
 
     for _, (images,labels) in enumerate(loaders['train']):
         images = images.requires_grad_().to(device) #(B*C*H*W)
-        images = images.view(images.size(0), -1) #(B, C*H*W)
+        # images = images.view(images.size(0), -1) #(B, C*H*W)
         labels = labels.to(device)
         optimizer.zero_grad()
         outputs = model(images)
@@ -128,7 +133,7 @@ def valid_or_test_fn(model, loaders, criterion, device, valid_or_test):
                     plt.figure(figsize=(4, 4))
                     plt.imshow(image.transpose(1,2,0))
                     plt.title(f'Predicted = {class_names[predicted_label]} / True Label = {class_names[label]}')
-                    plt.savefig('mlp_relu/test_out_1st_img_from_batch_{:04}.png'.format(i))
+                    plt.savefig('ViT/test_out_1st_img_from_batch_{:04}.png'.format(i))
                     plt.close()
         
         accuracy = 100 * correct / total
@@ -143,7 +148,7 @@ def plot_confusion_matrix(true_labels, predicted_labels, class_names):
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
     disp.plot(cmap=plt.cm.Blues) 
     plt.title('Confusion Matrix')
-    plt.savefig('mlp_relu/confusion_matrix.png')
+    plt.savefig('ViT/confusion_matrix.png')
     plt.close()
 
 
@@ -151,7 +156,7 @@ def plot_confusion_matrix(true_labels, predicted_labels, class_names):
 def main():
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')    
-    num_epochs = 30
+    num_epochs = 100
     learning_rate = 0.001
     batch_size = 64
     num_classes = 10
@@ -174,9 +179,9 @@ def main():
     flattened_image_dimension = 3*32*32  # checked by printing the shape of the images from the dataset
 
     # TODO : Define your model here
-    model = MLP_classifier(flattened_image_dimension, num_classes).to(device)
-    #model = CNN_classifier(3, num_classes).to(device)
-    #model = ViTForCIFAR10(img_size=32, patch_size=4, embed_dim=192, depth=6, num_heads=3, mlp_ratio=4.0).to(device)
+    # model = MLP_classifier(flattened_image_dimension, num_classes).to(device)
+    # model = CNN_classifier(3, num_classes).to(device)
+    model = ViTForCIFAR10(img_size=32, patch_size=4, embed_dim=192, depth=6, num_heads=3, mlp_ratio=4.0).to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -194,7 +199,7 @@ def main():
         val_loss, valid_accuracy, _, _ = valid_or_test_fn(model, loaders, criterion, device, 'valid')
         val_losses.append(val_loss)
         print(f'Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {valid_accuracy:.4f}')
-    loss_graph_name = 'mlp_relu/loss_graph.png'
+    loss_graph_name = 'ViT/loss_graph.png'
     plot_loss(train_losses, val_losses, loss_graph_name)
 
     # Testing
