@@ -15,17 +15,23 @@ class CNN_classifier(nn.Module):
         super(CNN_classifier, self).__init__()
 
         self.convolution_head = nn.Sequential(
-            nn.Conv2d(in_channels, 32, kernel_size=3, stride=1, padding=1), # (B, 32, 32, 32)
+            nn.Conv2d(in_channels, 32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2),
+            nn.Dropout2d(0.25),
+            # Dimension after max pooling (B, 32, 16, 16)
 
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),  # Conv2
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(2),  # output size /2
+            nn.MaxPool2d(2),
+            nn.Dropout2d(0.25),
+            # Dimension after max pooling (B, 64, 8, 8)
 
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),  # Conv3
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(2)   # output size /2
+            nn.MaxPool2d(2),
+            nn.Dropout2d(0.25)
+            # Dimension after max pooling (B, 128, 4, 4)
         )
 
         self.classification_head = nn.Sequential(
@@ -112,7 +118,6 @@ def valid_or_test_fn(model, loaders, criterion, device, valid_or_test):
         for i, (images, labels) in enumerate(loaders[valid_or_test]):
             images = images.to(device)
             original_images = images.clone()
-            # images = images.view(images.size(0), -1) #(B, C*H*W)
             labels = labels.to(device)
             outputs = model(images)
             loss = criterion(outputs, labels)
@@ -133,7 +138,7 @@ def valid_or_test_fn(model, loaders, criterion, device, valid_or_test):
                     plt.figure(figsize=(4, 4))
                     plt.imshow(image.transpose(1,2,0))
                     plt.title(f'Predicted = {class_names[predicted_label]} / True Label = {class_names[label]}')
-                    plt.savefig('ViT/test_out_1st_img_from_batch_{:04}.png'.format(i))
+                    plt.savefig('test_out_1st_img_from_batch_{:04}.png'.format(i))
                     plt.close()
         
         accuracy = 100 * correct / total
@@ -148,7 +153,7 @@ def plot_confusion_matrix(true_labels, predicted_labels, class_names):
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
     disp.plot(cmap=plt.cm.Blues) 
     plt.title('Confusion Matrix')
-    plt.savefig('ViT/confusion_matrix.png')
+    plt.savefig('confusion_matrix.png')
     plt.close()
 
 
@@ -156,7 +161,7 @@ def plot_confusion_matrix(true_labels, predicted_labels, class_names):
 def main():
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')    
-    num_epochs = 100
+    num_epochs = 30
     learning_rate = 0.001
     batch_size = 64
     num_classes = 10
@@ -180,8 +185,8 @@ def main():
 
     # TODO : Define your model here
     # model = MLP_classifier(flattened_image_dimension, num_classes).to(device)
-    # model = CNN_classifier(3, num_classes).to(device)
-    model = ViTForCIFAR10(img_size=32, patch_size=4, embed_dim=192, depth=6, num_heads=3, mlp_ratio=4.0).to(device)
+    model = CNN_classifier(3, num_classes).to(device)
+    #model = ViTForCIFAR10(img_size=32, patch_size=4, embed_dim=192, depth=6, num_heads=3, mlp_ratio=4.0).to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -199,7 +204,7 @@ def main():
         val_loss, valid_accuracy, _, _ = valid_or_test_fn(model, loaders, criterion, device, 'valid')
         val_losses.append(val_loss)
         print(f'Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {valid_accuracy:.4f}')
-    loss_graph_name = 'ViT/loss_graph.png'
+    loss_graph_name = 'loss_graph.png'
     plot_loss(train_losses, val_losses, loss_graph_name)
 
     # Testing
